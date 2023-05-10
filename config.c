@@ -7,12 +7,6 @@
 #include "ed.h"
 #include "utils.h"
 
-static const char *default_local_ip = "192.168.1.5";
-static const unsigned int default_local_port = 7;
-
-static const char *default_device_ip = "192.168.1.41";
-static const unsigned int default_device_port = 5000;
-
 // config keys
 static const char *KEY_SAMPLE_COUNT = "sample_count";
 static const char *KEY_DELAY_COUNT = "delay_count";
