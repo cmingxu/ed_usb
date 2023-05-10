@@ -88,8 +88,18 @@ int load_default_config(config_t *);
 // 初始化USB设备
 #define ESTABLISH_CONNECTION_SUCCESS 0
 int create_handle(config_t *t, addr_t *);
+int create_handle_with_serial_num(config_t *t, addr_t *);
 // 清理US
 int close_handle(config_t *, addr_t *);
+
+void sdk_info();
+void reset_default();
+void reset_device601();
+void reset_device245();
+void reset_devicenull();
+void get_chip_configuration();
+void abort_pipe();
+void get_queue_status();
 
 // 建立连接
 #define CONNECT_SUCCESS 0
@@ -114,18 +124,10 @@ int write_config(config_t*, FILE *);
 #define READ_CONFIG_FAIL -1
 int load_config(config_t*, FILE *);
 
-// 计算数据包数量
-unsigned int package_count(config_t *);
-unsigned int packet_count_of_each_repeat(config_t *c);
-
 // 计算数据bytecount
 unsigned int bytes_count(config_t *);
 
-// 计算数据每个repeat的数据大小
-unsigned int repeat_bytes_count(config_t *);
-
-// 计算数据每个repeat的数据大小heading includes
-unsigned int repeat_bytes_count_with_heading(config_t *);
+int start_recv_repeat_n(config_t *, addr_t *, int repeat, uint8_t*, size_t);
 
 // 内部触发
 #define START_COLLECT_SUCCESS 0
@@ -139,18 +141,6 @@ int start_collect(config_t *, addr_t *);
 #define STOP_COLLECT_FAIL 10001
 #define STOP_COLLECT_VERIFY_FAIL 10002
 int stop_collect(config_t *, addr_t *);
-
-// 开始数据接收 - 每次读取一个
-// @param - config_t 配置
-// @param - addr_t 地址
-// @param - repeat_response_t 回包结构，data字段需要提前申请内存
-// @param - repeat 从0 - c->repeat_count顺序增加，如果从设备接受的packet不属于此范围则丢弃
-// @param - timeout read timeout
-#define START_RECV_SUCCESS 10000
-#define START_RECV_PACKET_LOSS 10001
-#define START_RECV_INVALID_PACKET_LEN 10002
-int start_recv_by_repeat(config_t *, addr_t *, repeat_response_t *, unsigned int repeat, unsigned int timeout);
-
 
 #ifdef ED_DEBUG
 #define MYLOG(fmt, ...) do { \

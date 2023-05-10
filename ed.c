@@ -1,17 +1,20 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <math.h>
 #include <unistd.h>
 #include <errno.h>
+#include <ctype.h>
 
 #include "ed.h"
+#include "include/WinTypes.h"
 #include "include/ftd3xx.h"
 #include "utils.h"
 
 // default buf size
 static const unsigned int BUFSIZE = 2 << 10;
-static const unsigned int MTU = 1464;
+static const unsigned int TIMEOUT = 100;
 
 // 指令码
 static const uint8_t CODE_CONNECT_REQURST[8] = { 0xC3, 0x5A, 0xD8, 0x47, 0xC6, 0x59, 0xB3, 0x31};
@@ -28,24 +31,340 @@ static size_t _read(addr_t *, uint8_t *buf, size_t);
 static void _settimeout(addr_t *, unsigned int);
 static char* statusString(FT_STATUS status);
 
-static void reset_device() {
+static void set_trans_conf() {
+  FT_TRANSFER_CONF conf;
+  conf.pipe[0].bURBCount = 7;
+  conf.pipe[1].bURBCount = 7;
+  conf.pipe[0].dwURBBufferSize = 1024;
+  conf.pipe[1].dwURBBufferSize = 1024;
+  for (DWORD i = 0; i < 4; i++)
+    FT_SetTransferParams(&conf, i);
+}
+
+void sdk_info() {
+  unsigned int version[100] = {0};
+  unsigned int ldpwVersion[100] = {0};
+  FT_GetLibraryVersion(version);
+  printf("SDK Version: %x\n", *version);
+
+  set_trans_conf();
+
+  FT_HANDLE handle;
+  FT_STATUS status = FT_Create("000000000001", FT_OPEN_BY_SERIAL_NUMBER, &handle);
+  printf("FT_Create: %s\n", statusString(status));
+  FT_GetDriverVersion(handle, ldpwVersion);
+  printf("Driver Version: %x\n", *ldpwVersion);
+  FT_Close(handle);
+}
+
+
+static FT_STATUS ft_create_wrapper( PVOID pvArg, DWORD dwFlags,
+  FT_HANDLE *handle) {
+  set_trans_conf();
+  return FT_Create(pvArg, dwFlags, handle);
+}
+
+static FT_STATUS ft_close_wrapper(FT_HANDLE *handle) {
+  //FT_ResetDevicePort(handle);
+  FT_STATUS status =  FT_Close(handle);
+  // set_trans_conf();
+  // unsigned int count;
+  // FT_CreateDeviceInfoList(&count);
+  return status;
+}
+
+
+bool SetStringDescriptorsExample(UCHAR* pStringDescriptors, ULONG ulSize,
+                          CONST CHAR* pManufacturer, CONST CHAR* pProductDescription, CONST CHAR* pSerialNumber) {
+  LONG lLen = 0; UCHAR bLen = 0; UCHAR* pPtr = pStringDescriptors;
+  lLen = strlen(pManufacturer);
+  if (lLen < 1 || lLen >= 16) return false;
+  for (LONG i = 0; i < lLen; i++) if (!isprint(pManufacturer[i])) return FALSE;
+  // Product Description: Should be 31 bytes maximum printable characters
+  lLen = strlen(pProductDescription);
+  if (lLen < 1 || lLen >= 32) return false;
+  for (LONG i = 0; i < lLen; i++) if (!isprint(pProductDescription[i])) return FALSE;
+  // Serial Number: Should be 15 bytes maximum alphanumeric characters
+  lLen = strlen(pSerialNumber);
+  if (lLen < 1 || lLen >= 16) return false;
+  for (LONG i = 0; i < lLen; i++) if (!isalnum(pSerialNumber[i])) return FALSE;
+  // Manufacturer
+  bLen = strlen(pManufacturer);
+  pPtr[0] = bLen * 2 + 2; pPtr[1] = 0x03;
+  for (LONG i = 2, j = 0; i < pPtr[0]; i += 2, j++) {
+    pPtr[i] = pManufacturer[j]; pPtr[i + 1] = '\0'; }
+  pPtr += pPtr[0];
+  // Product Description
+  bLen = strlen(pProductDescription);
+  pPtr[0] = bLen * 2 + 2; pPtr[1] = 0x03;
+  for (LONG i = 2, j = 0; i < pPtr[0]; i += 2, j++) {
+    pPtr[i] = pProductDescription[j]; pPtr[i + 1] = '\0'; }
+  pPtr += pPtr[0];
+  // Serial Number
+  bLen = strlen(pSerialNumber);
+  pPtr[0] = bLen * 2 + 2; pPtr[1] = 0x03;
+  for (LONG i = 2, j = 0; i < pPtr[0]; i += 2, j++) {
+    pPtr[i] = pSerialNumber[j]; pPtr[i + 1] = '\0'; }
+  return true;
+}
+
+void abort_pipe(addr_t *addr) {
+  FT_AbortPipe(addr->handle, 0x02);
+  FT_AbortPipe(addr->handle, 0x82);
+
+  return;
+}
+
+void reset_device601() {
+  FT_STATUS ftStatus = FT_OK;
+  FT_HANDLE ftHandle;
+  FT_60XCONFIGURATION oConfigurationData = { 0 };
+  ftStatus = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &ftHandle);
+  if (ftStatus != FT_OK) {
+    printf("FT_Create FAILED_TO_WRITE_DEVICE %s\n", statusString(ftStatus));
+    return;
+  }
+  // Do NOt Change
+  // Do NOt Change
+  oConfigurationData.VendorID = CONFIGURATION_DEFAULT_VENDORID;
+  oConfigurationData.ProductID = CONFIGURATION_DEFAULT_PRODUCTID_601;
+  // Do NOt Change
+  // Do NOt Change
+  //
+  oConfigurationData.PowerAttributes = CONFIGURATION_DEFAULT_POWERATTRIBUTES;
+  oConfigurationData.PowerConsumption = CONFIGURATION_DEFAULT_POWERCONSUMPTION;
+  oConfigurationData.FIFOClock = CONFIGURATION_DEFAULT_FIFOCLOCK;
+  oConfigurationData.BatteryChargingGPIOConfig = CONFIGURATION_DEFAULT_BATTERYCHARGING;
+  oConfigurationData.MSIO_Control = CONFIGURATION_DEFAULT_MSIOCONTROL;
+  oConfigurationData.GPIO_Control = CONFIGURATION_DEFAULT_GPIOCONTROL;
+  //oConfigurationData.Reserved = 0;
+  oConfigurationData.Reserved2 = 0;
+  oConfigurationData.FlashEEPROMDetection = 0;
+  oConfigurationData.FIFOMode = CONFIGURATION_FIFO_MODE_600;
+  oConfigurationData.ChannelConfig = CONFIGURATION_CHANNEL_CONFIG_1;
+  //oConfigurationData.ChannelConfig = CONFIGURATION_CHANNEL_CONFIG_4;
+  //oConfigurationData.OptionalFeatureSupport = CONFIGURATION_OPTIONAL_FEATURE_DISABLECANCELSESSIONUNDERRUN;
+
+  USHORT flag;
+	flag = CONFIGURATION_OPTIONAL_FEATURE_ENABLENOTIFICATIONMESSAGE_INCHALL;
+	if (flag & oConfigurationData.OptionalFeatureSupport) {
+		oConfigurationData.OptionalFeatureSupport &= ~flag;
+		printf("Notification feature is not supported\r\n");
+	}
+
+	flag = CONFIGURATION_OPTIONAL_FEATURE_DISABLECANCELSESSIONUNDERRUN;
+	if (!(flag & oConfigurationData.OptionalFeatureSupport)) {
+		oConfigurationData.OptionalFeatureSupport |= flag;
+		printf("Cancel session on underrun is not supported\r\n");
+	}
+
+	flag = CONFIGURATION_OPTIONAL_FEATURE_DISABLEUNDERRUN_INCHALL;
+	if (!(flag & oConfigurationData.OptionalFeatureSupport)) {
+		oConfigurationData.OptionalFeatureSupport |= flag;
+		printf("Set 'disable underrun' to get better performance\r\n");
+	}
+  if(SetStringDescriptorsExample(oConfigurationData.StringDescriptors,
+                       sizeof(oConfigurationData.StringDescriptors),
+                       "MyComp601", "This Is My Product DescriptioN", "1234567890ABXCM")) {
+    printf("ues\n");
+  }
+  ftStatus = FT_SetChipConfiguration(ftHandle, &oConfigurationData);
+  if (ftStatus != FT_OK) {
+    printf("FT_SetChipConfiguration not ok %s\n", statusString( ftStatus)); 
+    return;
+  }
+  ft_close_wrapper(ftHandle);
+
+  //return true;
+}
+
+void reset_device245() {
+  FT_STATUS ftStatus = FT_OK;
+  FT_HANDLE ftHandle;
+  FT_60XCONFIGURATION oConfigurationData = { 0 };
+  ftStatus = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &ftHandle);
+  if (ftStatus != FT_OK) {
+    printf("FT_Create FAILED_TO_WRITE_DEVICE %s\n", statusString(ftStatus));
+    return;
+  }
+  // Do NOt Change
+  // Do NOt Change
+  oConfigurationData.VendorID = CONFIGURATION_DEFAULT_VENDORID;
+  oConfigurationData.ProductID = CONFIGURATION_DEFAULT_PRODUCTID_601;
+  // Do NOt Change
+  // Do NOt Change
+  //
+  oConfigurationData.PowerAttributes = CONFIGURATION_DEFAULT_POWERATTRIBUTES;
+  oConfigurationData.PowerConsumption = CONFIGURATION_DEFAULT_POWERCONSUMPTION;
+  oConfigurationData.FIFOClock = CONFIGURATION_DEFAULT_FIFOCLOCK;
+  oConfigurationData.BatteryChargingGPIOConfig = CONFIGURATION_DEFAULT_BATTERYCHARGING;
+  oConfigurationData.BatteryChargingGPIOConfig = 0; //CONFIGURATION_DEFAULT_BATTERYCHARGING;
+  oConfigurationData.MSIO_Control = CONFIGURATION_DEFAULT_MSIOCONTROL;
+  oConfigurationData.GPIO_Control = CONFIGURATION_DEFAULT_GPIOCONTROL;
+  //oConfigurationData.Reserved = 0;
+  oConfigurationData.Reserved2 = 0;
+  //oConfigurationData.FlashEEPROMDetection = 0x0;
+  oConfigurationData.FIFOMode = CONFIGURATION_FIFO_MODE_245;
+  oConfigurationData.ChannelConfig = CONFIGURATION_CHANNEL_CONFIG_1;
+  //oConfigurationData.ChannelConfig = CONFIGURATION_CHANNEL_CONFIG_4;
+  oConfigurationData.OptionalFeatureSupport = 0;
+  if(SetStringDescriptorsExample(oConfigurationData.StringDescriptors,
+                       sizeof(oConfigurationData.StringDescriptors),
+                       "FIFO", "FIDI SuperSpeed-FIFO Bridge", "000000000000001")) {
+    printf("ues\n");
+  }
+  ftStatus = FT_SetChipConfiguration(ftHandle, &oConfigurationData);
+  if (ftStatus != FT_OK) {
+    printf("FT_SetChipConfiguration not ok %s\n", statusString( ftStatus)); 
+    return;
+  }
+  ft_close_wrapper(ftHandle);
+
+  //return true;
+}
+
+void reset_devicenull() {
   FT_STATUS status;
   FT_HANDLE handle;
-  status = FT_Create(0, FT_OPEN_BY_INDEX, &handle);
+  status = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &handle);
   if(FT_FAILED(status)) {
     ED_LOG("FT_Create failed: %s\n", statusString(status));
     return;
   }
 
+  DWORD dwType;
+	FT_GetDeviceInfoDetail(0, NULL, &dwType, NULL, NULL, NULL, NULL, NULL);
+  printf("dwType: %d\n", dwType);
+
   status = FT_SetChipConfiguration(handle, NULL);
   if(FT_FAILED(status)) {
     ED_LOG("FT_SetChipConfiguration failed: %s\n", statusString(status));
+    ft_close_wrapper(handle);
     return;
   }
 
-  FT_Close(handle);
-
+  ft_close_wrapper(handle);
 }
+
+void reset_default() {
+  FT_STATUS status;
+  FT_HANDLE handle;
+  status = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &handle);
+  if(FT_FAILED(status)) {
+    ED_LOG("FT_Create failed: %s\n", statusString(status));
+    return;
+  }
+
+  DWORD dwType;
+	FT_GetDeviceInfoDetail(0, NULL, &dwType, NULL, NULL, NULL, NULL, NULL);
+  printf("dwType: %d\n", dwType);
+
+  FT_60XCONFIGURATION oConfigurationData = { 0 };
+  status = FT_GetChipConfiguration(handle, &oConfigurationData);
+  if (status != FT_OK) {
+    printf("FT_GetChipConfiguration not ok %s\n", statusString( status)); 
+    return;
+  }
+
+  status = FT_SetChipConfiguration(handle, &oConfigurationData);
+  if(FT_FAILED(status)) {
+    ED_LOG("FT_SetChipConfiguration failed: %s\n", statusString(status));
+    ft_close_wrapper(handle);
+    return;
+  }
+
+  ft_close_wrapper(handle);
+}
+
+void get_chip_configuration(){
+  FT_STATUS ftStatus = FT_OK;
+  FT_HANDLE ftHandle;
+  FT_60XCONFIGURATION oConfigurationData = { 0 };
+  ftStatus = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &ftHandle);
+  if (ftStatus != FT_OK) {
+    printf("FT_Create not ok %s\n", statusString( ftStatus)); 
+    return;
+  }
+  ftStatus = FT_GetChipConfiguration(ftHandle, &oConfigurationData);
+  if (ftStatus != FT_OK) {
+    printf("FT_GetChipConfiguration not ok %s\n", statusString( ftStatus)); 
+    return;
+  }
+  printf("VendorID: %x\n", oConfigurationData.VendorID);
+  printf("ProductID: %x\n", oConfigurationData.ProductID);
+  printf("PowerAttributes: %x\n", oConfigurationData.PowerAttributes);
+  printf("PowerConsumption: %x\n", oConfigurationData.PowerConsumption);
+  printf("FIFOClock: %x\n", oConfigurationData.FIFOClock);
+  printf("BatteryChargingGPIOConfig: %x\n", oConfigurationData.BatteryChargingGPIOConfig);
+  printf("MSIO_Control: %x\n", oConfigurationData.MSIO_Control);
+  printf("GPIO_Control: %x\n", oConfigurationData.GPIO_Control);
+//  printf("Reserved: %d\n", oConfigurationData.Reserved);
+  printf("Reserved2: %x\n", oConfigurationData.Reserved2);
+  printf("FlashEEPROMDetection: %x\n", oConfigurationData.FlashEEPROMDetection);
+  printf("FIFOMode: %x\n", oConfigurationData.FIFOMode);
+  printf("FIFOMode ENUM: CONFIGURATION_FIFO_MODE_245: %d CONFIGURATION_FIFO_MODE_600 %d \n", CONFIGURATION_FIFO_MODE_245, CONFIGURATION_FIFO_MODE_600);
+  printf("ChannelConfig: %x\n", oConfigurationData.ChannelConfig);
+  printf("ChannelConfig ENUM: CONFIGURATION_CHANNEL_CONFIG_1: %d "
+         "CONFIGURATION_CHANNEL_CONFIG_2 %d CONFIGURATION_CHANNEL_CONFIG_4 %d\n", CONFIGURATION_CHANNEL_CONFIG_1, CONFIGURATION_CHANNEL_CONFIG_2, CONFIGURATION_CHANNEL_CONFIG_4);
+  printf("OptionalFeatureSupport: %x\n", oConfigurationData.OptionalFeatureSupport);
+  printf("StringDescriptors: %s\n", oConfigurationData.StringDescriptors);
+  printf("StringDescriptors: %s\n", oConfigurationData.StringDescriptors);
+
+  //ft_close_wrapper(ftHandle);
+
+  //printf("11111111111");
+  //fflush(stdout);
+  //ftStatus = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &ftHandle);
+  //if (ftStatus != FT_OK) {
+  //  printf("FT_Create not ok %s\n", statusString( ftStatus)); 
+  //  return;
+  //}
+  //printf("222222222");
+  //fflush(stdout);
+  //ftStatus = FT_SetChipConfiguration(ftHandle, &oConfigurationData);
+  //if (ftStatus != FT_OK) {
+  //  printf("ft set chip config %s\n", statusString( ftStatus)); 
+  //  return;
+  //}
+
+  ft_close_wrapper(ftHandle);
+}
+
+int 
+create_handle_with_serial_num(config_t *c, addr_t *addr) {
+  if(addr->handle !=0) {
+    return 1;
+  }
+
+  if(addr->handle == 0) {
+    FT_STATUS ftStatus;
+    //ftStatus = FT_Create(0, FT_OPEN_BY_INDEX, &addr->handle);
+    ftStatus = ft_create_wrapper("000000000001", FT_OPEN_BY_SERIAL_NUMBER, &addr->handle);
+    if (ftStatus != FT_OK) {
+      ED_LOG("failed %s \n", statusString(ftStatus));
+      return ftStatus;
+    }
+  } 
+
+  FT_AbortPipe(addr->handle, 0x02);
+  FT_AbortPipe(addr->handle, 0x82);
+  return 0;
+}
+
+void get_queue_status(FT_HANDLE handle)
+{
+		DWORD dwBufferred;
+
+		if (FT_OK != FT_GetUnsentBuffer(handle, 2,
+					NULL, &dwBufferred)) {
+			printf("Failed to get unsent buffer size\n");
+		}
+
+
+		FT_GetReadQueueStatus(handle, 2, &dwBufferred);
+		printf("CH%d IN unread buffer size in queue:%u\n", 2, dwBufferred);
+}
+
 int 
 create_handle(config_t *c, addr_t *addr) {
   if(addr->handle !=0) {
@@ -54,22 +373,22 @@ create_handle(config_t *c, addr_t *addr) {
 
   if(addr->handle == 0) {
     FT_STATUS ftStatus;
-    ftStatus = FT_Create(0, FT_OPEN_BY_INDEX, &addr->handle);
+    ftStatus = ft_create_wrapper(0, FT_OPEN_BY_INDEX, &addr->handle);
     if (ftStatus != FT_OK) {
-      ED_LOG("%s \n", statusString(ftStatus))
-
-      reset_device();
-      ftStatus = FT_Create(0, FT_OPEN_BY_INDEX, &addr->handle);
+      ED_LOG("failed %s \n", statusString(ftStatus));
       return ftStatus;
     }
   } 
+
+  FT_AbortPipe(addr->handle, 0x02);
+  FT_AbortPipe(addr->handle, 0x82);
   return 0;
 }
 
 
 int close_handle(config_t *c, addr_t *addr) {
   if(addr->handle != 0){
-    FT_Close(addr->handle);
+    ft_close_wrapper(addr->handle);
   }
 
   addr->handle = 0;
@@ -77,7 +396,7 @@ int close_handle(config_t *c, addr_t *addr) {
 }
 
 // 核心功能函数
-int 
+int
 dev_connect(config_t *c, addr_t *addr) {
   assert(c);
   assert(addr);
@@ -85,17 +404,18 @@ dev_connect(config_t *c, addr_t *addr) {
   uint8_t message[32];
   memset(message, '\0', 32);
   _pack_uint8_arr(message, CODE_CONNECT_REQURST, 8);
+  _debug_hex(message, 32);
   if(_write(addr, message, 32) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return CONNECT_FAIL;
   }
 
-  _settimeout(addr, 100);
+  //_settimeout(addr, 100);
   // recv connect response
   uint8_t connect_resp[32];
   int nread;
   if((nread = _read(addr, connect_resp, 32)) != 32) {
-    ED_LOG("read faild: %d %s", nread, strerror(errno));
+    ED_LOG("read faild: 1   %d %s", nread, strerror(errno));
     return CONNECT_FAIL;
   }
 
@@ -151,7 +471,7 @@ start_collect(config_t *c, addr_t *addr){
   _pack_uint8_arr(buf, CODE_START_COLLECT, 8);
   _debug_hex(buf, 32);
 
-  _settimeout(addr, 100);
+  _settimeout(addr, 1000);
   if(_write(addr, buf, 32) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return START_COLLECT_FAIL;
@@ -161,56 +481,13 @@ start_collect(config_t *c, addr_t *addr){
 }
 
 int 
-start_recv_by_repeat(config_t *c, addr_t *addr, repeat_response_t *resp, unsigned int repeat, unsigned int timeout){
-  ED_LOG("start_recv_by_repeat: %s, repeat %d, resp->data_size: %ld", c->device_ip, repeat, resp->data_size);
-
-  assert(resp->data);
-  assert(resp->data_size > 0);
-  resp->recv_data_size = 0;
-  resp->recv_packet_count = 0;
-
-  unsigned int packet_start = packet_count_of_each_repeat(c) * repeat;
-  unsigned int packet_end = packet_count_of_each_repeat(c) * (repeat + 1);
-
-  resp->packet_count = packet_count_of_each_repeat(c);
-  memset(resp->data, '\0', resp->data_size);
-
-  _settimeout(addr, timeout);
-
-  uint8_t tmp[MTU + 8];
-  for (;;) {
-    int nread = _read(addr, tmp, MTU + 8);
-
-    if(nread == -1) {
-      ED_LOG("start_recv failed:%s, %d, %d", strerror(errno), errno, errno == EAGAIN);
-      return START_RECV_INVALID_PACKET_LEN;
-    }
-
-    if(nread < 8) {
-      ED_LOG("start_recv failed: nead length less than %d", 8);
-      return START_RECV_INVALID_PACKET_LEN;
-    }
-
-    unsigned int packet_no = parse_packet_no(tmp);
-    if(packet_no >= packet_start && packet_no < packet_end) {
-      //ED_LOG("\nrepeat: %d, start: %d, end: %d, recv_packet_no: %d, recv_packet_count: %d, nread:%d, total: %ld, data_size: %ld",
-      //  	    repeat, packet_start, packet_end, packet_no, resp->recv_packet_count, nread, resp->recv_data_size, resp->data_size);
-      memcpy(resp->data + resp->recv_data_size, tmp, nread);
-      resp->recv_data_size += nread;
-      resp->recv_packet_count += 1;
-    }
-
-    // continue read until 
-    if(packet_no < packet_start) {};
-
-    if(packet_no >= packet_end - 1) {
-      break;
-    }
-  }
-
-  return START_RECV_SUCCESS;
+start_recv_repeat_n(config_t *c, addr_t *addr, int repeat_index, uint8_t *data, size_t len){
+  //assert(repeat_index < c->repeat_count);
+  _settimeout(addr, 0);
+    int nread = _read(addr, data, len);
+  ED_LOG("read count %d", nread)
+  return nread;
 }
-
 
 // 停止采集
 // NOTES: stop_collect response take more then 1s to return
@@ -221,7 +498,7 @@ stop_collect(config_t *c, addr_t *addr){
   _pack_uint8_arr(buf, CODE_STOP_COLLECT_REQUEST, 8);
   _debug_hex(buf, 32);
 
-  _settimeout(addr, 100);
+  _settimeout(addr, 1000);
   if(_write(addr, buf, 32) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return STOP_COLLECT_FAIL;
@@ -231,11 +508,10 @@ stop_collect(config_t *c, addr_t *addr){
   // recv connect response
   uint8_t stop_collect_resp[32];
   int nread;
-AGAIN:
   nread = _read(addr, stop_collect_resp, 32);
   if(nread != 32 && errno == EAGAIN) {
-    ED_LOG("read faild: %s", strerror(errno));
-    goto AGAIN;
+    ED_LOG("read faild: %s nread %d", strerror(errno), nread);
+    return STOP_COLLECT_FAIL;
   }
 
   if(nread != 32) {
@@ -253,14 +529,6 @@ AGAIN:
   return STOP_COLLECT_SUCCESS;
 }
 
-unsigned int 
-package_count(config_t *c) {
-  ED_LOG("package_count: %s", c->device_ip);
-  assert(c);
-
-  return packet_count_of_each_repeat(c) * c->repeat_count;
-}
-
 unsigned int
 bytes_count(config_t *c) {
   ED_LOG("bytes_count: %s", c->device_ip);
@@ -271,15 +539,6 @@ bytes_count(config_t *c) {
 
 unsigned int repeat_bytes_count(config_t *c) {
   return  c->sample_count * 2 * c->ad_channel;
-}
-
-unsigned int repeat_bytes_count_with_heading(config_t *c) {
-  return  repeat_bytes_count(c) + packet_count_of_each_repeat(c) * 8;
-}
-
-unsigned int
-packet_count_of_each_repeat(config_t *c) {
-  return ceil(repeat_bytes_count(c) / (float)MTU);
 }
 
 //////////////////////////// STATIC FUNCTIONS ///////////////////
@@ -316,16 +575,23 @@ _pack_config(config_t *c, uint8_t *packed) {
 
 static size_t 
 _write(addr_t *addr, uint8_t *buf, size_t size){
-  ED_LOG("write %lu bytes to %d", size, addr->handle);
+  ED_LOG("about to write %lu bytes to %d", size, addr->handle);
   unsigned int count;
-  FT_WritePipe(addr->handle, 0x02, buf, size, &count, NULL);
+  FT_STATUS status = FT_WritePipe(addr->handle, 2, buf, size, &count, TIMEOUT);
+  if(status != FT_OK) {
+    ED_LOG("write faild: %s", statusString(status));
+  }
   return count;
 }
 
 static size_t 
 _read(addr_t *addr, uint8_t *buf, size_t size){
+  FT_SetPipeTimeout(addr->handle, 2, 1000);
   unsigned int count;
-  FT_ReadPipe(addr->handle, 0x82, buf, size, &count, NULL);
+  FT_STATUS status = FT_ReadPipe(addr->handle, 2, buf, size, &count, TIMEOUT);
+  if(status != FT_OK) {
+    ED_LOG("read faild: %d %s %d\n", size, statusString(status), count);
+  }
   return count;
 }
 
@@ -405,5 +671,3 @@ statusString (FT_STATUS status) {
         return "UNKNOWN ERROR";
     }
 }
-
-

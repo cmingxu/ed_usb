@@ -444,7 +444,7 @@ bool SetChipConfigurationExample() {
     CONFIGURATION_OPTIONAL_FEATURE_DISABLECANCELSESSIONUNDERRUN;
   if(SetStringDescriptorsExample(oConfigurationData.StringDescriptors,
                        sizeof(oConfigurationData.StringDescriptors),
-                       "MyCompany", "This Is My Product Description", "1234567890ABCde")) {
+                       "MyCompany", "This Is My Product Description", "1234567890ABXCM")) {
     printf("ues");
   }
   FT_SetChipConfiguration(ftHandle, &oConfigurationData);
@@ -482,11 +482,11 @@ int main (int argc, char *argv[]) {
   ///in_ch_cnt = 1;
   //set_channel_config(true, CONFIGURATION_FIFO_CLK_100);
   //  get_device_lists();
-  //SetChipConfigurationExample();
+  SetChipConfigurationExample();
  // get_chip_configuration();
 
   //null_config();
-  read_and_write();
+  //read_and_write();
   return 0;
 }
 

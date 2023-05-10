@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #include "../ed.h"
 #include "../utils.h"
@@ -12,7 +13,7 @@ int main(int argc, const char *argv[])
   config_t *cfg = (config_t *)malloc(sizeof(config_t));
   load_default_config(cfg);
   cfg->sample_count = 880000;
-  cfg->delay_count = 453333;
+  // cfg->delay_count = 453333;
   cfg->repeat_count = 30;
 
   // 连接设备
@@ -24,6 +25,8 @@ int main(int argc, const char *argv[])
     exit(1);
   }
 
+  abort_pipe(addr);
+
   // 停止接受, 防止之前有采集任务, 可多次调用
   int stop_res = stop_collect(cfg, addr);
   if(stop_res != STOP_COLLECT_SUCCESS) {
@@ -33,42 +36,42 @@ int main(int argc, const char *argv[])
   // 建立连接， 向设备发连接指令
   int connect_res = dev_connect(cfg, addr);
   if (connect_res != CONNECT_SUCCESS) {
-    exit(1);
+    printf("connect failed , code %d", connect_res);
+    goto END;
   }
 
-  // 发送配置到设备
-  send_config_to_device(cfg, addr);
+  //  // 发送配置到设备
+  int config_status = send_config_to_device(cfg, addr);
+  if(config_status != SEND_CONFIG_SUCCESS) {
+    printf("config failed , code %d", config_status);
+    goto END;
+  }
 
-  // 准备接收数据的内存
-  printf("bytes_count(c) is %d\n", bytes_count(cfg));
-  void *buf = malloc(bytes_count(cfg));
 
   // 通知设备开始采集
-  start_collect(cfg, addr);
-  for(unsigned int i = 0; i < cfg->repeat_count; i++) {
-	repeat_response_t *resp = (repeat_response_t *)malloc(sizeof(repeat_response_t));
-	void *p = (void *)malloc(repeat_bytes_count_with_heading(cfg));
-	if(!p) {
-		perror("1123");
-		exit(1);
-	}
-	resp->data = p;
-	resp->data_size = repeat_bytes_count_with_heading(cfg);
-  	size_t nread = start_recv_by_repeat(cfg, addr, resp, i, 500);
-  	printf("received bytes count %ld\n", resp->recv_data_size);
-  	printf("received packet count %ld\n", resp->recv_packet_count);
-  	printf("expect packet count %ld\n", resp->packet_count);
-  	_debug_hex(resp->data, 16);
-	free(resp->data);
-	free(resp);
+  int start_status = start_collect(cfg, addr);
+  if(start_status != START_COLLECT_SUCCESS) {
+    printf("start failed , code %d", start_status);
+    goto END;
   }
 
-  printf("repeat_bytes_count %d\n", repeat_bytes_count_with_heading(cfg));
-  printf("sample count %d\n", cfg->sample_count);
-  printf("repeat count %d\n", cfg->repeat_count);
+  // 准备接收数据的内存
+  // 这里注意数据要及时转走
+  int cnt = cfg->sample_count * cfg->ad_channel * 2;
 
-  // 清理环境/断开连接
-  free(buf);
+  for(int i = 0; i < cfg->repeat_count; i++) {
+    void *buf = malloc(cnt);
+    int recvCnt = start_recv_repeat_n(cfg, addr, i, buf, cnt);
+    printf("repeat index %d => recvCnt %d\n", i, recvCnt);
+    usleep(1000);
+    if(recvCnt != cnt ) {
+      goto END;
+    }
+  }
+
+  //get_queue_status(addr->handle);
+  stop_collect(cfg, addr);
+END: 
   close_handle(cfg, addr);
 
   return 0;
