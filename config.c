@@ -41,6 +41,7 @@ static bool has_prefix(const char*, const char *) ;
 int load_default_config(config_t * c) {
   assert(c);
   c->sample_count = 1000000;
+  c->down_sample_count = 4;
   c->delay_count = 320000;
   c->repeat_count = 3;
 

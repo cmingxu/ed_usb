@@ -12,9 +12,10 @@ int main(int argc, const char *argv[])
 {
   config_t *cfg = (config_t *)malloc(sizeof(config_t));
   load_default_config(cfg);
-  cfg->sample_count = 880000;
-  // cfg->delay_count = 453333;
-  cfg->repeat_count = 30;
+  cfg->sample_count = 1000000;
+  cfg->delay_count = 320000;
+  cfg->repeat_count = 3;
+  cfg->ad_channel = 1;
 
   // 连接设备
   addr_t *addr = (addr_t *)malloc(sizeof(addr_t));

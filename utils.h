@@ -14,8 +14,5 @@ void _pack_short(uint8_t *, short);
 
 void _debug_hex(void *, size_t);
 
-char* int_to_ip(char *, uint16_t);
-uint32_t ip_to_int(const char *ip);
-uint32_t parse_packet_no(const uint8_t *header);
 
 #endif

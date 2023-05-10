@@ -7,12 +7,16 @@ TARGET=
 release: build-static
 	mkdir -p ./release
 	cp -r ./include ./release
-	cp ./ed.h ./release
-	cp ./utils.h ./release
-	cp ./bin/libed-static.a ./release
-	cp ./lib/libftd3xx-static.a ./release
+	cp ./ed.h ./release/include
+	cp ./utils.h ./release/include
+	mkdir ./release/lib
+	cp ./bin/libed-static.a ./release/lib
+	cp ./lib/libftd3xx-static.a ./release/lib
+	cp ./test/happy-path.c ./release
 	tar cvf release.tar ./release
 	rm -r ./release
+	rm ./ed.h.gch
+	rm ./utils.h.gch
 
 build-static:
 	${CC} -c   -I./include ./ed.h ./ed.c -lm
