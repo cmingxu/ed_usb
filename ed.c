@@ -14,7 +14,7 @@
 
 // default buf size
 static const unsigned int BUFSIZE = 2 << 10;
-static const unsigned int TIMEOUT = 100;
+static const unsigned int DEFAULT_TIMEOUT = 1000;
 
 // 指令码
 static const uint8_t CODE_CONNECT_REQURST[8] = { 0xC3, 0x5A, 0xD8, 0x47, 0xC6, 0x59, 0xB3, 0x31};
@@ -26,9 +26,8 @@ static const uint8_t CODE_STOP_COLLECT_REQUEST[8] = {0x53, 0x74, 0x6F, 0x70, 0x2
 static const uint8_t CODE_STOP_COLLECT_RESPONSE[8] = {0x46, 0x69, 0x6E, 0x3E, 0x73, 0x74, 0x6F, 0x50};
 
 static int _pack_config(config_t *, uint8_t *);
-static size_t _write(addr_t *, uint8_t *buf, size_t);
-static size_t _read(addr_t *, uint8_t *buf, size_t);
-static void _settimeout(addr_t *, unsigned int);
+static size_t _write(addr_t *, uint8_t *buf, size_t, unsigned int);
+static size_t _read(addr_t *, uint8_t *buf, size_t, unsigned int);
 static char* statusString(FT_STATUS status);
 
 static void set_trans_conf() {
@@ -100,6 +99,7 @@ bool SetStringDescriptorsExample(UCHAR* pStringDescriptors, ULONG ulSize,
   for (LONG i = 2, j = 0; i < pPtr[0]; i += 2, j++) {
     pPtr[i] = pProductDescription[j]; pPtr[i + 1] = '\0'; }
   pPtr += pPtr[0];
+
   // Serial Number
   bLen = strlen(pSerialNumber);
   pPtr[0] = bLen * 2 + 2; pPtr[1] = 0x03;
@@ -111,6 +111,7 @@ bool SetStringDescriptorsExample(UCHAR* pStringDescriptors, ULONG ulSize,
 void abort_pipe(addr_t *addr) {
   FT_AbortPipe(addr->handle, 0x02);
   FT_AbortPipe(addr->handle, 0x82);
+  FT_AbortPipe(addr->handle, 2);
 
   return;
 }
@@ -145,29 +146,29 @@ void reset_device601() {
   //oConfigurationData.ChannelConfig = CONFIGURATION_CHANNEL_CONFIG_4;
   //oConfigurationData.OptionalFeatureSupport = CONFIGURATION_OPTIONAL_FEATURE_DISABLECANCELSESSIONUNDERRUN;
 
-  USHORT flag;
-	flag = CONFIGURATION_OPTIONAL_FEATURE_ENABLENOTIFICATIONMESSAGE_INCHALL;
-	if (flag & oConfigurationData.OptionalFeatureSupport) {
-		oConfigurationData.OptionalFeatureSupport &= ~flag;
-		printf("Notification feature is not supported\r\n");
-	}
-
-	flag = CONFIGURATION_OPTIONAL_FEATURE_DISABLECANCELSESSIONUNDERRUN;
-	if (!(flag & oConfigurationData.OptionalFeatureSupport)) {
-		oConfigurationData.OptionalFeatureSupport |= flag;
-		printf("Cancel session on underrun is not supported\r\n");
-	}
-
-	flag = CONFIGURATION_OPTIONAL_FEATURE_DISABLEUNDERRUN_INCHALL;
-	if (!(flag & oConfigurationData.OptionalFeatureSupport)) {
-		oConfigurationData.OptionalFeatureSupport |= flag;
-		printf("Set 'disable underrun' to get better performance\r\n");
-	}
-  if(SetStringDescriptorsExample(oConfigurationData.StringDescriptors,
-                       sizeof(oConfigurationData.StringDescriptors),
-                       "MyComp601", "This Is My Product DescriptioN", "1234567890ABXCM")) {
-    printf("ues\n");
-  }
+ //  USHORT flag;
+	// flag = CONFIGURATION_OPTIONAL_FEATURE_ENABLENOTIFICATIONMESSAGE_INCHALL;
+	// if (flag & oConfigurationData.OptionalFeatureSupport) {
+	// 	oConfigurationData.OptionalFeatureSupport &= ~flag;
+	// 	printf("Notification feature is not supported\r\n");
+	// }
+	//
+	// flag = CONFIGURATION_OPTIONAL_FEATURE_DISABLECANCELSESSIONUNDERRUN;
+	// if (!(flag & oConfigurationData.OptionalFeatureSupport)) {
+	// 	oConfigurationData.OptionalFeatureSupport |= flag;
+	// 	printf("Cancel session on underrun is not supported\r\n");
+	// }
+	//
+	// flag = CONFIGURATION_OPTIONAL_FEATURE_DISABLEUNDERRUN_INCHALL;
+	// if (!(flag & oConfigurationData.OptionalFeatureSupport)) {
+	// 	oConfigurationData.OptionalFeatureSupport |= flag;
+	// 	printf("Set 'disable underrun' to get better performance\r\n");
+	// }
+ //  if(SetStringDescriptorsExample(oConfigurationData.StringDescriptors,
+ //                       sizeof(oConfigurationData.StringDescriptors),
+ //                       "MyComp601", "This Is My Product DescriptioN", "1234567890ABXCM")) {
+ //    printf("ues\n");
+ //  }
   ftStatus = FT_SetChipConfiguration(ftHandle, &oConfigurationData);
   if (ftStatus != FT_OK) {
     printf("FT_SetChipConfiguration not ok %s\n", statusString( ftStatus)); 
@@ -223,6 +224,7 @@ void reset_device245() {
   //return true;
 }
 
+// dangeous, comment out
 void reset_devicenull() {
   FT_STATUS status;
   FT_HANDLE handle;
@@ -232,17 +234,17 @@ void reset_devicenull() {
     return;
   }
 
-  DWORD dwType;
-	FT_GetDeviceInfoDetail(0, NULL, &dwType, NULL, NULL, NULL, NULL, NULL);
-  printf("dwType: %d\n", dwType);
-
-  status = FT_SetChipConfiguration(handle, NULL);
-  if(FT_FAILED(status)) {
-    ED_LOG("FT_SetChipConfiguration failed: %s\n", statusString(status));
-    ft_close_wrapper(handle);
-    return;
-  }
-
+ //  DWORD dwType;
+	// FT_GetDeviceInfoDetail(0, NULL, &dwType, NULL, NULL, NULL, NULL, NULL);
+ //  printf("dwType: %d\n", dwType);
+	//
+ //  status = FT_SetChipConfiguration(handle, NULL);
+ //  if(FT_FAILED(status)) {
+ //    ED_LOG("FT_SetChipConfiguration failed: %s\n", statusString(status));
+ //    ft_close_wrapper(handle);
+ //    return;
+ //  }
+	//
   ft_close_wrapper(handle);
 }
 
@@ -367,6 +369,7 @@ void get_queue_status(FT_HANDLE handle)
 
 int 
 create_handle(config_t *c, addr_t *addr) {
+  ED_LOG("create_handle %s", "entering");
   if(addr->handle !=0) {
     return 1;
   }
@@ -387,6 +390,7 @@ create_handle(config_t *c, addr_t *addr) {
 
 
 int close_handle(config_t *c, addr_t *addr) {
+  ED_LOG("close_handle %s", "entering");
   if(addr->handle != 0){
     ft_close_wrapper(addr->handle);
   }
@@ -398,6 +402,7 @@ int close_handle(config_t *c, addr_t *addr) {
 // 核心功能函数
 int
 dev_connect(config_t *c, addr_t *addr) {
+  ED_LOG("dev_connect %s", "entering");
   assert(c);
   assert(addr);
   // sending connect request
@@ -405,7 +410,7 @@ dev_connect(config_t *c, addr_t *addr) {
   memset(message, '\0', 32);
   _pack_uint8_arr(message, CODE_CONNECT_REQURST, 8);
   _debug_hex(message, 32);
-  if(_write(addr, message, 32) != 32) {
+  if(_write(addr, message, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return CONNECT_FAIL;
   }
@@ -414,7 +419,7 @@ dev_connect(config_t *c, addr_t *addr) {
   // recv connect response
   uint8_t connect_resp[32];
   int nread;
-  if((nread = _read(addr, connect_resp, 32)) != 32) {
+  if((nread = _read(addr, connect_resp, 32, DEFAULT_TIMEOUT)) != 32) {
     ED_LOG("read faild: 1   %d %s", nread, strerror(errno));
     return CONNECT_FAIL;
   }
@@ -436,15 +441,14 @@ send_config_to_device(config_t *c, addr_t *addr) {
   _pack_config(c, buf);
   _debug_hex(buf, 32);
 
-  if(_write(addr, buf, 32) != 32) {
+  if(_write(addr, buf, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return SEND_CONFIG_FAIL;
   }
 
-  _settimeout(addr, 100);
   // recv connect response
   uint8_t send_config_resp[32];
-  if(_read(addr, send_config_resp, 32) != 32) {
+  if(_read(addr, send_config_resp, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("read faild: %s", strerror(errno));
     return SEND_CONFIG_FAIL;
   }
@@ -471,8 +475,7 @@ start_collect(config_t *c, addr_t *addr){
   _pack_uint8_arr(buf, CODE_START_COLLECT, 8);
   _debug_hex(buf, 32);
 
-  _settimeout(addr, 1000);
-  if(_write(addr, buf, 32) != 32) {
+  if(_write(addr, buf, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return START_COLLECT_FAIL;
   }
@@ -481,10 +484,10 @@ start_collect(config_t *c, addr_t *addr){
 }
 
 int 
-start_recv_repeat_n(config_t *c, addr_t *addr, int repeat_index, uint8_t *data, size_t len){
-  //assert(repeat_index < c->repeat_count);
-  _settimeout(addr, 0);
-    int nread = _read(addr, data, len);
+start_recv_repeat_n(config_t *c, addr_t *addr, int repeat_index, uint8_t *data, size_t len, unsigned int timeout){
+  ED_LOG("start_recv_repeat_n: %d", repeat_index);
+  assert(repeat_index < c->repeat_count);
+  int nread = _read(addr, data, len, timeout);
   ED_LOG("read count %d", nread)
   return nread;
 }
@@ -493,22 +496,24 @@ start_recv_repeat_n(config_t *c, addr_t *addr, int repeat_index, uint8_t *data, 
 // NOTES: stop_collect response take more then 1s to return
 int
 stop_collect(config_t *c, addr_t *addr){
+  abort_pipe(addr);
+
+  ED_LOG("stop_collect: %d", addr->handle);
   uint8_t buf[32];
   memset(buf, '\0', 32);
   _pack_uint8_arr(buf, CODE_STOP_COLLECT_REQUEST, 8);
   _debug_hex(buf, 32);
 
-  _settimeout(addr, 1000);
-  if(_write(addr, buf, 32) != 32) {
+  if(_write(addr, buf, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
     return STOP_COLLECT_FAIL;
   }
 
-  _settimeout(addr, 5000);
+  //_settimeout(addr, 5000);
   // recv connect response
   uint8_t stop_collect_resp[32];
   int nread;
-  nread = _read(addr, stop_collect_resp, 32);
+  nread = _read(addr, stop_collect_resp, 32, DEFAULT_TIMEOUT);
   if(nread != 32 && errno == EAGAIN) {
     ED_LOG("read faild: %s nread %d", strerror(errno), nread);
     return STOP_COLLECT_FAIL;
@@ -562,6 +567,7 @@ _pack_config(config_t *c, uint8_t *packed) {
 
   pos+=4;
 
+
   _pack_short(pos, c->trigger);
   pos+=1;
 
@@ -574,10 +580,11 @@ _pack_config(config_t *c, uint8_t *packed) {
 }
 
 static size_t 
-_write(addr_t *addr, uint8_t *buf, size_t size){
+_write(addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
   ED_LOG("about to write %lu bytes to %d", size, addr->handle);
+  FT_SetPipeTimeout(addr->handle, 2, timeout);
   unsigned int count;
-  FT_STATUS status = FT_WritePipe(addr->handle, 2, buf, size, &count, TIMEOUT);
+  FT_STATUS status = FT_WritePipe(addr->handle, 2, buf, size, &count, NULL);
   if(status != FT_OK) {
     ED_LOG("write faild: %s", statusString(status));
   }
@@ -585,20 +592,15 @@ _write(addr_t *addr, uint8_t *buf, size_t size){
 }
 
 static size_t 
-_read(addr_t *addr, uint8_t *buf, size_t size){
-  FT_SetPipeTimeout(addr->handle, 2, 1000);
+_read(addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
+  ED_LOG("about to read %lu bytes from %d with timeout: %d", size, addr->handle, timeout);
+  FT_SetPipeTimeout(addr->handle, 0x82, timeout);
   unsigned int count;
-  FT_STATUS status = FT_ReadPipe(addr->handle, 2, buf, size, &count, TIMEOUT);
+  FT_STATUS status = FT_ReadPipe(addr->handle, 2, buf, size, &count, NULL);
   if(status != FT_OK) {
     ED_LOG("read faild: %d %s %d\n", size, statusString(status), count);
   }
   return count;
-}
-
-static void
-_settimeout(addr_t *addr, unsigned int milliseconds) {
-  FT_SetPipeTimeout(addr->handle, 
-                    0xFF, milliseconds);
 }
 
 static char *

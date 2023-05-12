@@ -127,7 +127,7 @@ int load_config(config_t*, FILE *);
 // 计算数据bytecount
 unsigned int bytes_count(config_t *);
 
-int start_recv_repeat_n(config_t *, addr_t *, int repeat, uint8_t*, size_t);
+int start_recv_repeat_n(config_t *, addr_t *, int repeat, uint8_t*, size_t, unsigned int);
 
 // 内部触发
 #define START_COLLECT_SUCCESS 0
