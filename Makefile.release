@@ -1,0 +1,10 @@
+CC = $(shell which gcc)
+
+happy-path: ensure_bin
+	${CC} -o bin/happy-path -I. -I./include happy-path.c ./lib/libed-static.a ./lib/libftd3xx-static.a -lstdc++ -DED_DEBUG
+
+
+ensure_bin:
+	@mkdir -p ./bin
+
+default: happy-path

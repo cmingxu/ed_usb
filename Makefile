@@ -13,6 +13,7 @@ release: build-static
 	cp ./bin/libed-static.a ./release/lib
 	cp ./lib/libftd3xx-static.a ./release/lib
 	cp ./test/happy-path.c ./release
+	cp ./Makefile.release ./release/Makefile
 	tar cvf release.tar ./release
 	rm -r ./release
 	rm ./ed.h.gch
