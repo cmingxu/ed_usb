@@ -5,8 +5,8 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include "../ed.h"
-#include "../utils.h"
+#include "ed.h"
+#include "utils.h"
 
 int main(int argc, const char *argv[])
 {
