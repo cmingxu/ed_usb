@@ -98,7 +98,7 @@ void reset_device601();
 void reset_device245();
 void reset_devicenull();
 void get_chip_configuration();
-void abort_pipe();
+void abort_pipe(addr_t *);
 void get_queue_status();
 
 // 建立连接
