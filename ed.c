@@ -25,9 +25,9 @@ static const uint8_t CODE_START_COLLECT[8] = {0x49, 0x6E, 0x74, 0x2D, 0x54, 0x72
 static const uint8_t CODE_STOP_COLLECT_REQUEST[8] = {0x53, 0x74, 0x6F, 0x70, 0x2B, 0x41, 0x63, 0x71};
 static const uint8_t CODE_STOP_COLLECT_RESPONSE[8] = {0x46, 0x69, 0x6E, 0x3E, 0x73, 0x74, 0x6F, 0x50};
 
-static int _pack_config(config_t *, uint8_t *);
-static size_t _write(addr_t *, uint8_t *buf, size_t, unsigned int);
-static size_t _read(addr_t *, uint8_t *buf, size_t, unsigned int);
+static int _pack_config(usb_config_t *, uint8_t *);
+static size_t _write(usb_addr_t *, uint8_t *buf, size_t, unsigned int);
+static size_t _read(usb_addr_t *, uint8_t *buf, size_t, unsigned int);
 static char* statusString(FT_STATUS status);
 
 static void set_trans_conf() {
@@ -108,7 +108,7 @@ bool SetStringDescriptorsExample(UCHAR* pStringDescriptors, ULONG ulSize,
   return true;
 }
 
-void abort_pipe(addr_t *addr) {
+void abort_pipe(usb_addr_t *addr) {
   FT_AbortPipe(addr->handle, 0x02);
   FT_AbortPipe(addr->handle, 0x82);
   FT_AbortPipe(addr->handle, 2);
@@ -333,7 +333,7 @@ void get_chip_configuration(){
 }
 
 int 
-create_handle_with_serial_num(config_t *c, addr_t *addr) {
+usb_create_handle_with_serial_num(usb_config_t *c, usb_addr_t *addr) {
   if(addr->handle !=0) {
     return 1;
   }
@@ -348,8 +348,8 @@ create_handle_with_serial_num(config_t *c, addr_t *addr) {
     }
   } 
 
-  FT_AbortPipe(addr->handle, 0x02);
-  FT_AbortPipe(addr->handle, 0x82);
+  //FT_AbortPipe(addr->handle, 0x02);
+  //FT_AbortPipe(addr->handle, 0x82);
   return 0;
 }
 
@@ -368,7 +368,7 @@ void get_queue_status(FT_HANDLE handle)
 }
 
 int 
-create_handle(config_t *c, addr_t *addr) {
+usb_create_handle(usb_config_t *c, usb_addr_t *addr) {
   ED_LOG("create_handle %s", "entering");
   if(addr->handle !=0) {
     return 1;
@@ -383,13 +383,14 @@ create_handle(config_t *c, addr_t *addr) {
     }
   } 
 
-  FT_AbortPipe(addr->handle, 0x02);
-  FT_AbortPipe(addr->handle, 0x82);
+  // FT_AbortPipe(addr->handle, 0x02);
+  // FT_AbortPipe(addr->handle, 0x82);
   return 0;
 }
 
 
-int close_handle(config_t *c, addr_t *addr) {
+int 
+usb_close_handle(usb_config_t *c, usb_addr_t *addr) {
   ED_LOG("close_handle %s", "entering");
   if(addr->handle != 0){
     ft_close_wrapper(addr->handle);
@@ -401,7 +402,7 @@ int close_handle(config_t *c, addr_t *addr) {
 
 // 核心功能函数
 int
-dev_connect(config_t *c, addr_t *addr) {
+usb_dev_connect(usb_config_t *c, usb_addr_t *addr) {
   ED_LOG("dev_connect %s", "entering");
   assert(c);
   assert(addr);
@@ -412,7 +413,7 @@ dev_connect(config_t *c, addr_t *addr) {
   _debug_hex(message, 32);
   if(_write(addr, message, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
-    return CONNECT_FAIL;
+    return USB_CONNECT_FAIL;
   }
 
   //_settimeout(addr, 100);
@@ -421,19 +422,19 @@ dev_connect(config_t *c, addr_t *addr) {
   int nread;
   if((nread = _read(addr, connect_resp, 32, DEFAULT_TIMEOUT)) != 32) {
     ED_LOG("read faild: 1   %d %s", nread, strerror(errno));
-    return CONNECT_FAIL;
+    return USB_CONNECT_FAIL;
   }
 
   uint8_t expected[8];
   _pack_uint8_arr(expected, CODE_CONNECT_RESPONSE, 8);
   if(memcmp(connect_resp, expected, 8) != 0 ) {
-    return CONNECT_VERIFY_ERR;
+    return USB_CONNECT_VERIFY_ERR;
   }
-  return CONNECT_SUCCESS;
+  return USB_CONNECT_SUCCESS;
 }
 
 int
-send_config_to_device(config_t *c, addr_t *addr) {
+usb_send_config_to_device(usb_config_t *c, usb_addr_t *addr) {
   ED_LOG("send_config_to_device: %s", addr->handle);
 
   uint8_t buf[32];
@@ -443,31 +444,31 @@ send_config_to_device(config_t *c, addr_t *addr) {
 
   if(_write(addr, buf, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
-    return SEND_CONFIG_FAIL;
+    return USB_SEND_CONFIG_FAIL;
   }
 
   // recv connect response
   uint8_t send_config_resp[32];
   if(_read(addr, send_config_resp, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("read faild: %s", strerror(errno));
-    return SEND_CONFIG_FAIL;
+    return USB_SEND_CONFIG_FAIL;
   }
 
   uint8_t expected[8];
   _pack_uint8_arr(expected, CODE_SEND_CONFIG_RESPONSE, 8);
   _debug_hex(send_config_resp, 32);
   if(memcmp(send_config_resp, expected, 8) != 0 ) {
-    return SEND_CONFIG_VERIFY_ERR;
+    return USB_SEND_CONFIG_VERIFY_ERR;
   }
 
-  return SEND_CONFIG_SUCCESS;
+  return USB_SEND_CONFIG_SUCCESS;
 }
 
 
 
 // 内部触发命令
 int
-start_collect(config_t *c, addr_t *addr){
+usb_start_collect(usb_config_t *c, usb_addr_t *addr){
   ED_LOG("start_collect: %s", c->device_ip);
 
   uint8_t buf[32];
@@ -477,14 +478,14 @@ start_collect(config_t *c, addr_t *addr){
 
   if(_write(addr, buf, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
-    return START_COLLECT_FAIL;
+    return USB_START_COLLECT_FAIL;
   }
 
-  return START_COLLECT_SUCCESS;
+  return USB_START_COLLECT_SUCCESS;
 }
 
 int 
-start_recv_repeat_n(config_t *c, addr_t *addr, int repeat_index, uint8_t *data, size_t len, unsigned int timeout){
+usb_start_recv_repeat_n(usb_config_t *c, usb_addr_t *addr, int repeat_index, uint8_t *data, size_t len, unsigned int timeout){
   ED_LOG("start_recv_repeat_n: %d", repeat_index);
   assert(repeat_index < c->repeat_count);
   int nread = _read(addr, data, len, timeout);
@@ -495,8 +496,8 @@ start_recv_repeat_n(config_t *c, addr_t *addr, int repeat_index, uint8_t *data, 
 // 停止采集
 // NOTES: stop_collect response take more then 1s to return
 int
-stop_collect(config_t *c, addr_t *addr){
-  abort_pipe(addr);
+usb_stop_collect(usb_config_t *c, usb_addr_t *addr){
+  //abort_pipe(addr);
 
   ED_LOG("stop_collect: %d", addr->handle);
   uint8_t buf[32];
@@ -506,7 +507,7 @@ stop_collect(config_t *c, addr_t *addr){
 
   if(_write(addr, buf, 32, DEFAULT_TIMEOUT) != 32) {
     ED_LOG("write faild: %s", strerror(errno));
-    return STOP_COLLECT_FAIL;
+    return USB_STOP_COLLECT_FAIL;
   }
 
   //_settimeout(addr, 5000);
@@ -516,39 +517,39 @@ stop_collect(config_t *c, addr_t *addr){
   nread = _read(addr, stop_collect_resp, 32, DEFAULT_TIMEOUT);
   if(nread != 32 && errno == EAGAIN) {
     ED_LOG("read faild: %s nread %d", strerror(errno), nread);
-    return STOP_COLLECT_FAIL;
+    return USB_STOP_COLLECT_FAIL;
   }
 
   if(nread != 32) {
     ED_LOG("read faild: %s", strerror(errno));
-    return STOP_COLLECT_FAIL;
+    return USB_STOP_COLLECT_FAIL;
   }
 
   uint8_t expected[8];
   _pack_uint8_arr(expected, CODE_STOP_COLLECT_RESPONSE, 8);
   _debug_hex(stop_collect_resp, 32);
   if(memcmp(stop_collect_resp, expected, 8) != 0 ) {
-    return STOP_COLLECT_VERIFY_FAIL;
+    return USB_STOP_COLLECT_VERIFY_FAIL;
   }
 
-  return STOP_COLLECT_SUCCESS;
+  return USB_STOP_COLLECT_SUCCESS;
 }
 
 unsigned int
-bytes_count(config_t *c) {
+usb_bytes_count(usb_config_t *c) {
   ED_LOG("bytes_count: %s", c->device_ip);
   assert(c);
 
   return c->sample_count * 2 * c->ad_channel * c->repeat_count;
 }
 
-unsigned int repeat_bytes_count(config_t *c) {
+unsigned int repeat_bytes_count(usb_config_t *c) {
   return  c->sample_count * 2 * c->ad_channel;
 }
 
 //////////////////////////// STATIC FUNCTIONS ///////////////////
 static int
-_pack_config(config_t *c, uint8_t *packed) {
+_pack_config(usb_config_t *c, uint8_t *packed) {
   uint8_t *pos = packed;
   _pack_uint8_arr(pos, CODE_SEND_CONFIG_REQUEST, 8);
   pos+=8;
@@ -580,7 +581,7 @@ _pack_config(config_t *c, uint8_t *packed) {
 }
 
 static size_t 
-_write(addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
+_write(usb_addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
   ED_LOG("about to write %lu bytes to %d", size, addr->handle);
   FT_SetPipeTimeout(addr->handle, 2, timeout);
   unsigned int count;
@@ -592,7 +593,7 @@ _write(addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
 }
 
 static size_t 
-_read(addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
+_read(usb_addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
   ED_LOG("about to read %lu bytes from %d with timeout: %d", size, addr->handle, timeout);
   FT_SetPipeTimeout(addr->handle, 0x82, timeout);
   unsigned int count;

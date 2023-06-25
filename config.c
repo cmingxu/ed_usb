@@ -32,37 +32,37 @@ static bool _read_config_prop_str(const char *, char *);
 static bool has_prefix(const char*, const char *) ;
 
 
-int load_default_config(config_t * c) {
+int usb_load_default_config(usb_config_t * c) {
   assert(c);
   c->sample_count = 1000000;
   c->down_sample_count = 4;
   c->delay_count = 320000;
   c->repeat_count = 3;
 
-  c->ad_channel = ADCHANNEL_SINGLE;
-  c->ad_bit = ADBIT_12;
+  c->ad_channel = USB_ADCHANNEL_SINGLE;
+  c->ad_bit = USB_ADBIT_12;
   //c->trigger = TRIGGER_OUTER;
-  c->trigger = TRIGGER_INNER;
-  c->outer_trigger = OUTER_TRIGGER_DOWN;
+  c->trigger = USB_TRIGGER_INNER;
+  c->outer_trigger = USB_OUTER_TRIGGER_DOWN;
 
   return 0;
 }
 
 // update local addr, local ip and local port update respectively
-int set_local_addr(config_t *c, const char*ip, unsigned int port) {
+int set_local_addr(usb_config_t *c, const char*ip, unsigned int port) {
   strcpy(c->local_ip, ip);
   c->local_port = port;
   return 0;
 }
 
 // update local addr, local ip and local port update respectively
-int set_device_addr(config_t *c, const char*ip, unsigned int port) {
+int set_device_addr(usb_config_t *c, const char*ip, unsigned int port) {
   strcpy(c->device_ip, ip);
   c->device_port = port;
   return 0;
 }
 
-int write_config(config_t *c, FILE *cf) {
+int write_config(usb_config_t *c, FILE *cf) {
   assert(c);
 
   ftruncate(fileno(cf), 0);
@@ -76,10 +76,10 @@ int write_config(config_t *c, FILE *cf) {
   _write_config_prop_short(cf, KEY_OUTER_TRIGGER, c->outer_trigger);
   fflush(cf);
 
-  return WRITE_CONFIG_SUCCESS;
+  return USB_WRITE_CONFIG_SUCCESS;
 }
 
-int load_config(config_t *c, FILE *config_file) {
+int load_config(usb_config_t *c, FILE *config_file) {
   assert(c);
 
   char local_ip_buf[128], device_ip_buf[128];
@@ -122,7 +122,7 @@ int load_config(config_t *c, FILE *config_file) {
     }
   }
 
-  return READ_CONFIG_SUCCESS;
+  return USB_READ_CONFIG_SUCCESS;
 }
 
 
