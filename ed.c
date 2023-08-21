@@ -383,8 +383,8 @@ usb_create_handle(usb_config_t *c, usb_addr_t *addr) {
     }
   } 
 
-  // FT_AbortPipe(addr->handle, 0x02);
-  // FT_AbortPipe(addr->handle, 0x82);
+  //FT_AbortPipe(addr->handle, 0x02);
+  //FT_AbortPipe(addr->handle, 0x82);
   return 0;
 }
 
@@ -601,6 +601,7 @@ _read(usb_addr_t *addr, uint8_t *buf, size_t size, unsigned int timeout){
   if(status != FT_OK) {
     ED_LOG("read faild: %d %s %d\n", size, statusString(status), count);
   }
+  ED_LOG("_read first %d byte: \n", 32)
   return count;
 }
 

@@ -35,7 +35,7 @@ static bool has_prefix(const char*, const char *) ;
 int usb_load_default_config(usb_config_t * c) {
   assert(c);
   c->sample_count = 1000000;
-  c->down_sample_count = 4;
+  c->down_sample_count = 2;
   c->delay_count = 320000;
   c->repeat_count = 3;
 

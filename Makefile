@@ -22,7 +22,7 @@ release: build-static
 build-static:
 	${CC} -c   -I./include ./ed.h ./ed.c -lm
 	${CC} -c   -I./include ./ed.h ./config.c -lm
-	${CC} -c   -I./include ./utils.h ./utils.c -lm
+	${CC} -c   -I./include ./utils.h ./utils.c -lm 
 	ar cr bin/libed-static.a ed.o config.o utils.o
 	rm *.o
 
@@ -35,6 +35,7 @@ example: build-example
 
 happy-path: ensure_bin
 	${CC} -o bin/happy-path -I. -I./include test/happy-path.c ./utils.c ./ed.c ./config.c -lm -DED_DEBUG  $(LDFLAGS)
+	#${CC} -o bin/happy-path -I. -I./include test/happy-path.c ./utils.c ./config.c -lm -DED_DEBUG  $(LDFLAGS) -led-static -lftd3xx-static -lstdc++
 
 happy-path-with-shared-object: ensure_bin
 	${CC} -o bin/happy-path-with-so -I. -I./include test/happy-path.c -L ./bin -led -lm -DED_DEBUG  $(LDFLAGS)

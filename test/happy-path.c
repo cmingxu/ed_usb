@@ -32,7 +32,8 @@ int main(int argc, const char *argv[])
   // 停止接受, 防止之前有采集任务, 可多次调用
  int stop_res = usb_stop_collect(cfg, addr);
  if(stop_res != USB_STOP_COLLECT_SUCCESS) {
-   exit(1);
+    printf("stop failed , code %d", stop_res);
+    goto END;
  }
 
   // 建立连接， 向设备发连接指令
@@ -70,7 +71,7 @@ int main(int argc, const char *argv[])
   for(int i = 0; i < cfg->repeat_count; i++) {
     void *buf = malloc(cnt);
     int recvCnt = usb_start_recv_repeat_n(cfg, addr, i, buf, cnt, timeout);
-    printf("repeat index %d => recvCnt %d\n", i, recvCnt);
+    printf("repeat index %d => recvCnt %d \n", i, recvCnt);
     if(recvCnt != cnt ) {
       goto END;
     }
